@@ -112,6 +112,10 @@ def set_values(*parameterizeds, **param_values):
         for parameterized, old_values in old:
             parameterized.param.update(**old_values)
 
+class Skip(RuntimeError):
+    """
+    Exception that allows skipping an update for function-level updates.
+    """
 
 class Param(PaneBase):
     """
@@ -843,7 +847,10 @@ class ParamMethod(ReplacementPane):
                     else:
                         self._update_inner(new_obj)
             else:
-                self._update_inner(await awaitable)
+                try:
+                    self._update_inner(await awaitable)
+                except Skip:
+                    pass
         except Exception as e:
             if not curdoc or (has_context and curdoc.session_context):
                 raise e
@@ -862,7 +869,10 @@ class ParamMethod(ReplacementPane):
             if self.object is None:
                 new_object = Spacer()
             else:
-                new_object = self.eval(self.object)
+                try:
+                    new_object = self.eval(self.object)
+                except Skip:
+                    return
             if inspect.isawaitable(new_object) or isinstance(new_object, types.AsyncGeneratorType):
                 param.parameterized.async_executor(partial(self._eval_async, new_object))
                 return
