@@ -2,7 +2,7 @@
 
 Welcome to our tutorial on  Panel's [indicators](https://panel.holoviz.org/reference/index.html#indicators)!
 
-We will delve into the use of Indicators with an example that uses them to visualizes the key metrics of wind turbines in an engaging and insightful manner. The result will be this:
+We will delve into the use of Indicators with an example that uses them to visualize the key metrics of wind turbines in an engaging and insightful manner. The result will be this:
 
 :::{grid-item-card} Windturbines Explorer
 
