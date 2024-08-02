@@ -242,6 +242,7 @@ def update_versions(app, docname, source):
        "{{BOKEH_VERSION}}" : BOKEH_VERSION,
        "{{PYSCRIPT_VERSION}}" : PYSCRIPT_VERSION,
        "{{PYODIDE_VERSION}}" : _get_pyodide_version(),
+       "{{TABULATOR_VERSION}}": "6.2.1"
     }
 
     for old, new in version_replace.items():
