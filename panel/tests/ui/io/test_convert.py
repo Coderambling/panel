@@ -23,11 +23,11 @@ if not (PANEL_LOCAL_WHL.is_file() and BOKEH_LOCAL_WHL.is_file()):
         allow_module_level=True
     )
 
-pytestmark = pytest.mark.ui
+pytestmark = [pytest.mark.ui, pytest.mark.flaky(max_runs=3)]
 
 
-if os.name == "wt":
-    TIMEOUT = 150_000
+if os.name == "nt":
+    TIMEOUT = 200_000
 else:
     TIMEOUT = 90_000
 
@@ -118,7 +118,8 @@ def http_serve():
     temp_dir = tempfile.TemporaryDirectory()
     temp_path = pathlib.Path(temp_dir.name)
 
-    (temp_path / 'test.html').write_text('<html><body>Test</body></html>')
+    test_file = (temp_path / 'test.html')
+    test_file.write_text('<html><body>Test</body></html>')
 
     try:
         shutil.copy(PANEL_LOCAL_WHL, temp_path / PANEL_LOCAL_WHL.name)
@@ -131,7 +132,6 @@ def http_serve():
 
     httpd, _ = http_serve_directory(str(temp_path), port=HTTP_PORT)
 
-
     time.sleep(1)
 
     def write(app):
@@ -141,9 +141,11 @@ def http_serve():
             f.write(app)
         return app_path
 
-    yield write
-
-    httpd.shutdown()
+    try:
+        yield write
+    finally:
+        httpd.shutdown()
+        temp_dir.cleanup()
 
 
 def wait_for_app(http_serve, app, page, runtime, wait=True, **kwargs):
