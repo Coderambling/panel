@@ -60,6 +60,14 @@
         <mxCell id="18" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" parent="1" source="9" target="10" edge="1">
           <mxGeometry width="50" height="50" relative="1" as="geometry" />
         </mxCell>
+        <!-- Add this inside the <root> element, after the existing cells -->
+<mxCell id="20" value="&lt;pre&gt;&lt;code style=&quot;background-color: #f6f8fa; color: #24292e;&quot;&gt;import panel as pn&#xa;from panel.custom import Child&#xa;from panel.viewable import Viewer&#xa;&#xa;class SingleChild(Viewer):&#xa;    object = Child()&#xa;&#xa;    def __panel__(self):&#xa;      return pn.Column(&quot;A Single Child&quot;, &#xa;                      self.param.object.rx())&#xa;&#xa;single_child = SingleChild(&#xa;    object=pn.pane.Markdown(&quot;A **Markdown** pane!&quot;)&#xa;)&#xa;single_child.servable()&lt;/code&gt;&lt;/pre&gt;" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;rounded=1;fillColor=#f6f8fa;strokeColor=#c9c9c9;spacingTop=8;spacingLeft=8;spacingBottom=8;fontFamily=Consolas;fontSize=12;" vertex="1" parent="1">
+  <mxGeometry x="40" y="440" width="320" height="280" as="geometry"/>
+</mxCell>
+<!-- Add a label for the code section -->
+<mxCell id="21" value="Source Code" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+  <mxGeometry x="40" y="410" width="100" height="30" as="geometry"/>
+</mxCell>
       </root>
     </mxGraphModel>
   </diagram>
