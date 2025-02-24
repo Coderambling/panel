@@ -145,6 +145,16 @@
         <mxCell id="ENEzuuvZ73lVKPyi42dF-8" value="single_child (Instance)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
           <mxGeometry x="20" y="260" width="120" height="40" as="geometry" />
         </mxCell>
+        <mxCell id="api-opyj75P1Xm_j1nTY-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ENEzuuvZ73lVKPyi42dF-9">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="80" y="490" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="api-opyj75P1Xm_j1nTY-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ENEzuuvZ73lVKPyi42dF-9">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="190" y="370" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
         <mxCell id="ENEzuuvZ73lVKPyi42dF-9" value="Markdown Pane Instance&#xa;(&quot;A **Markdown** pane!&quot;)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
           <mxGeometry x="20" y="340" width="120" height="60" as="geometry" />
         </mxCell>
