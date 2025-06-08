@@ -30,6 +30,7 @@ import param  # type: ignore
 
 from bokeh.core.serialization import DeserializationError
 from bokeh.document import Document
+from bokeh.models import UIElement
 from bokeh.resources import Resources
 from jinja2 import Template
 from param import Undefined
@@ -44,9 +45,10 @@ from .io.embed import embed_state
 from .io.loading import start_loading_spinner, stop_loading_spinner
 from .io.model import add_to_doc, patch_cds_msg
 from .io.notebook import (
-    JupyterCommManagerBinary as JupyterCommManager, ipywidget, render_embed,
-    render_mimebundle, render_model,
+    JupyterCommManagerBinary as JupyterCommManager, ipywidget,
+    patch_inline_stylesheets, render_embed, render_mimebundle, render_model,
 )
+from .io.resources import set_resource_mode
 from .io.save import save
 from .io.state import curdoc_locked, set_curdoc, state
 from .util import escape, param_reprs
@@ -104,10 +106,10 @@ class Layoutable(param.Parameterized):
         Minimal height of the component (in pixels) if height is adjustable.""")
 
     max_width = param.Integer(default=None, bounds=(0, None), doc="""
-        Minimal width of the component (in pixels) if width is adjustable.""")
+        Maximum width of the component (in pixels) if width is adjustable.""")
 
     max_height = param.Integer(default=None, bounds=(0, None), doc="""
-        Minimal height of the component (in pixels) if height is adjustable.""")
+        Maximum height of the component (in pixels) if height is adjustable.""")
 
     margin = Margin(default=0, doc="""
         Allows to create additional space around the component. May
@@ -536,7 +538,10 @@ class MimeRenderMixin:
         )
         self._comms[ref] = (comm, client_comm)
         manager.client_comm_id = client_comm.id
-        return render_mimebundle(model, doc, comm, manager, location)
+        return render_mimebundle(
+            model, doc, comm, manager, location,
+            resources='inline' if config.inline else 'cdn'
+        )
 
 
 class Renderable(param.Parameterized, MimeRenderMixin):
@@ -612,6 +617,13 @@ class Renderable(param.Parameterized, MimeRenderMixin):
         Panel object that was changed and any old, unchanged models
         so they can be skipped (see https://github.com/holoviz/panel/pull/4989)
         """
+        ref = root.ref['id']
+        if changed is not None and ref in changed._models and ref in state._views:
+            _, _, _, comm = state._views[ref]
+            if comm is not None and config.inline:
+                for model in changed._models[ref][0].select({'type': UIElement}):
+                    patch_inline_stylesheets(model)
+
         changed = self if changed is None else changed
         hooks = self._preprocessing_hooks+self._hooks
         for hook in hooks:
@@ -835,9 +847,18 @@ class Viewable(Renderable, Layoutable, ServableMixin):
 
         doc = Document()
         comm = state._comm_manager.get_server_comm()
-        model = self._render_model(doc, comm)
+
+        resources = 'inline' if config.inline and not state._is_pyodide else 'cdn'
+        with set_resource_mode(resources):
+            model = self._render_model(doc, comm)
         if config.embed:
             return render_model(model)
+
+        if resources == 'inline':
+            for submodel in model.select({'type': UIElement}):
+                if not isinstance(submodel, UIElement):
+                    continue
+                patch_inline_stylesheets(submodel)
 
         bundle, meta = self._render_mimebundle(model, doc, comm, location)
 
@@ -1244,7 +1265,7 @@ def is_viewable_param(parameter: param.Parameter) -> bool:
     """
     if isinstance(parameter, (Child, Children)):
         return True
-    if isinstance(parameter, param.ClassSelector) and _is_viewable_class_selector(parameter):
+    if isinstance(parameter, param.ClassSelector) and _is_viewable_class_selector(parameter) and parameter.is_instance:
         return True
     if isinstance(parameter, param.List) and _is_viewable_list(parameter):
         return True

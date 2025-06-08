@@ -163,11 +163,12 @@ class ChatInterface(ChatFeed):
         The rendered buttons.""")
 
     _stylesheets: ClassVar[list[str]] = [f"{CDN_DIST}css/chat_interface.css"]
+    _input_type: ClassVar[type[WidgetBase]] = ChatAreaInput
 
     def __init__(self, *objects, **params):
         widgets = params.get("widgets")
         if widgets is None:
-            params["widgets"] = [ChatAreaInput(placeholder="Send a message")]
+            params["widgets"] = [self._input_type(placeholder="Send a message")]
         elif not isinstance(widgets, list):
             params["widgets"] = [widgets]
         active = params.pop("active", None)
@@ -204,15 +205,7 @@ class ChatInterface(ChatFeed):
         if self.show_button_name is None:
             self.show_button_name = self.width is None or self.width >= 400
 
-    @param.depends("widgets", "button_properties", watch=True)
-    def _init_widgets(self):
-        """
-        Initialize the input widgets.
-
-        Returns
-        -------
-        The input widgets.
-        """
+    def _init_button_data(self):
         default_button_properties = {
             "send": {"icon": "send", "_default_callback": self._click_send},
             "stop": {"icon": "player-stop", "_default_callback": self._click_stop},
@@ -221,7 +214,6 @@ class ChatInterface(ChatFeed):
             "clear": {"icon": "trash", "_default_callback": self._click_clear},
         }
         self._allow_revert = len(self.button_properties) == 0
-
         button_properties = {**default_button_properties, **self.button_properties}
         for index, (name, properties) in enumerate(button_properties.items()):
             name = name.lower()
@@ -256,6 +248,16 @@ class ChatInterface(ChatFeed):
                 js_on_click=js_on_click,
             )
 
+    @param.depends("widgets", "button_properties", watch=True)
+    def _init_widgets(self):
+        """
+        Initialize the input widgets.
+
+        Returns
+        -------
+        The input widgets.
+        """
+        self._init_button_data()
         widgets = self.widgets
         if isinstance(self.widgets, WidgetBase):
             widgets = [self.widgets]
@@ -290,7 +292,7 @@ class ChatInterface(ChatFeed):
             # TextAreaInput will trigger auto send!
             auto_send = (
                 isinstance(widget, tuple(self.auto_send_types)) or
-                type(widget) in (TextInput, ChatAreaInput)
+                type(widget) in (TextInput, self._input_type)
             )
             if auto_send and widget in new_widgets:
                 callback = partial(self._button_data["send"].callback, self)
@@ -299,7 +301,7 @@ class ChatInterface(ChatFeed):
                 sizing_mode="stretch_width",
                 css_classes=["chat-interface-input-widget"]
             )
-            if isinstance(widget, ChatAreaInput):
+            if isinstance(widget, self._input_type):
                 self.link(widget, disabled="disabled_enter")
 
             self._buttons = {}
@@ -639,13 +641,11 @@ class ChatInterface(ChatFeed):
     async def _update_input_disabled(self):
         busy_states = (CallbackState.RUNNING, CallbackState.GENERATING)
         if not self.show_stop or self._callback_state not in busy_states or self._callback_future is None:
-            with param.parameterized.batch_call_watchers(self):
-                self._buttons["send"].visible = True
-                self._buttons["stop"].visible = False
+            self._buttons["send"].visible = True
+            self._buttons["stop"].visible = False
         else:
-            with param.parameterized.batch_call_watchers(self):
-                self._buttons["send"].visible = False
-                self._buttons["stop"].visible = True
+            self._buttons["send"].visible = False
+            self._buttons["stop"].visible = True
 
     async def _cleanup_response(self):
         """
@@ -660,6 +660,7 @@ class ChatInterface(ChatFeed):
         user: str | None = None,
         avatar: str | bytes | BytesIO | None = None,
         respond: bool = True,
+        trigger_post_hook: bool = True,
         **message_params
     ) -> ChatMessage | None:
 
@@ -680,6 +681,8 @@ class ChatInterface(ChatFeed):
             Will default to the avatar parameter.
         respond : bool
             Whether to execute the callback.
+        trigger_post_hook: bool
+            Whether to trigger the post hook after sending.
         message_params : dict
             Additional parameters to pass to the ChatMessage.
 
@@ -690,11 +693,13 @@ class ChatInterface(ChatFeed):
         if not isinstance(value, ChatMessage):
             if user is None:
                 user = self.user
-            if avatar is None:
+            if avatar is None and user == self.user:
                 avatar = self.avatar
         message_params["show_edit_icon"] = message_params.get(
             "show_edit_icon", user == self.user and self.edit_callback is not None)
-        return super().send(value, user=user, avatar=avatar, respond=respond, **message_params)
+        return super().send(
+            value, user=user, avatar=avatar, respond=respond,
+            trigger_post_hook=trigger_post_hook, **message_params)
 
     def stream(
         self,
@@ -703,6 +708,7 @@ class ChatInterface(ChatFeed):
         avatar: str | bytes | BytesIO | None = None,
         message: ChatMessage | None = None,
         replace: bool = False,
+        trigger_post_hook: bool = False,
         **message_params
     ) -> ChatMessage | None:
         """
@@ -728,6 +734,8 @@ class ChatInterface(ChatFeed):
             The message to update.
         replace : bool
             Whether to replace the existing text when streaming a string or dict.
+        trigger_post_hook: bool
+            Whether to trigger the post hook after streaming.
         message_params : dict
             Additional parameters to pass to the ChatMessage.
 
@@ -739,6 +747,9 @@ class ChatInterface(ChatFeed):
             # ChatMessage cannot set user or avatar when explicitly streaming
             # so only set to the default when not a ChatMessage
             user = user or self.user
-            avatar = avatar or self.avatar
+            if avatar is None and user == self.user:
+                avatar = self.avatar
         message_params["show_edit_icon"] = message_params.get("show_edit_icon", user == self.user and self.edit_callback is not None)
-        return super().stream(value, user=user, avatar=avatar, message=message, replace=replace, **message_params)
+        return super().stream(
+            value, user=user, avatar=avatar, message=message, replace=replace,
+            trigger_post_hook=trigger_post_hook, **message_params)
