@@ -180,7 +180,7 @@ def capture_code_cell(cell):
 
     if not parses:
         # Skip cell if it cannot be parsed
-        log.warn(
+        log.warning(
             "The following cell did not contain valid Python syntax "
             f"and was skipped:\n\n{cell['source']}"
         )
@@ -448,7 +448,7 @@ class PanelCodeHandler(CodeHandler):
 
         if runner:
             self._runner = runner
-        elif source:
+        elif source is not None:
             self._runner = PanelCodeRunner(source, filename, argv, package=package)
         else:
             raise ValueError("Must provide source code to PanelCodeHandler")

@@ -76,8 +76,7 @@ def check_cli_tool(tool_name: str) -> bool:
     if cmd:
         return True
     if sys.platform == 'win32':
-        tool_name = f'{tool_name}.cmd'
-        return check_cli_tool(tool_name)
+        return shutil.which(f'{tool_name}.cmd')
     return False
 
 
@@ -158,7 +157,7 @@ def find_module_bundles(module_spec: str) -> dict[pathlib.Path, list[type[Reacti
         module_file = module
     assert module_file is not None
 
-    bundles = defaultdict(list)
+    bundles: defaultdict[pathlib.Path, list[type[ReactiveESM]]] = defaultdict(list)
     module_path = pathlib.Path(module_file).parent
     for component in components:
         if component._bundle:
@@ -167,12 +166,13 @@ def find_module_bundles(module_spec: str) -> dict[pathlib.Path, list[type[Reacti
                 path = (module_path / bundle_path).absolute()
             else:
                 path = bundle_path.absolute()
-            bundles[path].append(component)
         elif len(components) > 1 and not classes:
             component_module = module_name or component.__module__
-            bundles[module_path / f'{component_module}.bundle.js'].append(component)
+            path = module_path / f'{component_module}.bundle.js'
         else:
-            bundles[component._module_path / f'{component.__name__}.bundle.js'].append(component)
+            path = component._module_path / f'{component.__name__}.bundle.js'
+        if component not in bundles[path]:
+            bundles[path].append(component)
 
     return dict(bundles)
 
@@ -404,27 +404,42 @@ def generate_project(
     component_names = []
     dependencies = {}
     export_spec: ExportSpec = {}
+    shared_modules = {}
     index = ''
     for component in components:
+        try:
+            esm_path = component._esm_path(compiled='compiling')
+        except Exception:
+            esm_path = None
         name = component.__name__
-        esm_path = component._esm_path(compiled=False)
         if esm_path:
+            imprt = esm_path.stem
             ext = esm_path.suffix.lstrip('.')
         else:
+            imprt = name
             ext = 'jsx' if issubclass(component, ReactComponent) else 'js'
         code, component_deps = extract_dependencies(component)
         # Detect default export in component code and handle import accordingly
         if _EXPORT_DEFAULT_RE.search(code):
-            index += f'import {name} from "./{name}"\n'
+            index += f'import {name} from "./{imprt}"\n'
         else:
-            index += f'import * as {name} from "./{name}"\n'
+            index += f'import * as {name} from "./{imprt}"\n'
 
-        with open(path / f'{name}.{ext}', 'w') as component_file:
+        with open(path / f'{imprt}.{ext}', 'w') as component_file:
             component_file.write(code)
         # TODO: Improve merging of dependencies
         dependencies.update(component_deps)
         merge_exports(export_spec, component._exports__)
         component_names.append(name)
+        shared_modules.update(component._esm_shared)
+
+    for name, shared_module in shared_modules.items():
+        if isinstance(shared_module, os.PathLike):
+            code = shared_module.read_text(encoding='utf-8')
+        else:
+            code = shared_module
+        with open(path / f'{name}.js', 'w') as shared_file:
+            shared_file.write(code)
 
     # Create package.json and write to temp directory
     package_json = {"dependencies": dependencies}

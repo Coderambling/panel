@@ -32,7 +32,7 @@ from bokeh.embed.bundle import (
 from bokeh.model import Model
 from bokeh.models import ImportedStyleSheet
 from bokeh.resources import Resources as BkResources, _get_server_urls
-from bokeh.settings import settings as _settings
+from bokeh.settings import _Unset, settings as _settings
 from jinja2.environment import Environment
 from jinja2.loaders import FileSystemLoader
 from markupsafe import Markup
@@ -180,7 +180,10 @@ def set_resource_mode(mode):
         yield
     finally:
         RESOURCE_MODE = old_mode
-        _settings.resources.set_value(old_resources)
+        if old_resources is _Unset:
+            _settings.resources.unset_value()
+        else:
+            _settings.resources.set_value(old_resources)
 
 def use_cdn() -> bool:
     return _settings.resources(default="server") != 'server' or state._is_pyodide
@@ -671,6 +674,8 @@ class Resources(BkResources):
                 if supcls_files == cls_files:
                     model = cls
             for resource in getattr(model, resource_type, []):
+                if isinstance(resource, pathlib.PurePath):
+                    continue
                 if state.rel_path:
                     resource = resource.lstrip(state.rel_path+'/')
                 if not isurl(resource) and not resource.lstrip('./').startswith('static/extensions'):
@@ -808,17 +813,6 @@ class Resources(BkResources):
         js_files = self.adjust_paths([
             js for js in files if self.mode != 'inline' or not is_cdn_url(js)
         ])
-
-        # Load requirejs last to avoid interfering with other libraries
-        dist_dir = self.dist_dir
-        require_index = [i for i, jsf in enumerate(js_files) if 'require' in jsf]
-        if require_index:
-            requirejs = js_files.pop(require_index[0])
-            if any('ace' in jsf for jsf in js_files):
-                js_files.append(dist_dir + 'pre_require.js')
-            js_files.append(requirejs)
-            if any('ace' in jsf for jsf in js_files):
-                js_files.append(dist_dir + 'post_require.js')
         return js_files
 
     @property

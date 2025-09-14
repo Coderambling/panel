@@ -57,7 +57,7 @@ from tornado.wsgi import WSGIContainer
 
 # Internal imports
 from ..config import config
-from ..util import fullpath
+from ..util import edit_readonly, fullpath
 from ..util.warnings import warn
 from .application import build_applications
 from .document import (  # noqa
@@ -79,9 +79,9 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from bokeh.application.application import SessionContext
-    from bokeh.bundle import Bundle
     from bokeh.core.types import ID
     from bokeh.document.document import DocJson
+    from bokeh.embed.bundle import Bundle
     from bokeh.server.session import ServerSession
     from jinja2 import Template
 
@@ -422,7 +422,7 @@ class DocHandler(LoginUrlMixin, BkDocHandler):
         payload.update(self.application_context.application.process_request(self.request))  # type: ignore
         return payload
 
-    def _authorize(self, session: bool = False) -> tuple[bool, str | None]:
+    def _authorize(self, session: bool = False) -> tuple[bool | None, str | None]:
         """
         Determine if user is authorized to access this application.
         """
@@ -576,6 +576,33 @@ class RootHandler(LoginUrlMixin, BkRootHandler):
     Custom RootHandler that provides the CDN_DIST directory as a
     template variable.
     """
+
+    @authenticated
+    async def get(self, *args, **kwargs):
+        if self.use_redirect and len(self.applications) == 1:
+            app_names = list(self.applications.keys())
+            redirect_to = f".{app_names[0]}"
+            self.redirect(redirect_to)
+        else:
+            if self.index is None:
+                apps = sorted(self.applications.keys())
+                index = "app_index.html"
+            else:
+                index = self.index
+                apps = []
+                for slug in self.applications.keys():
+                    slug = (
+                        slug
+                        if self.request.uri.endswith("/") or not self.prefix
+                        else f"{self.prefix}{slug}"
+                    )
+                    # Try to get custom application page card title from config
+                    # using as default value the application page slug
+                    default_title = slug[1:].replace("_", " ").title()
+                    title = config.index_titles.get(slug, default_title)
+                    apps.append((slug, title))
+                apps = sorted(apps, key=lambda app: app[1])
+            self.render(index, prefix=self.prefix, items=apps)
 
     def render(self, *args, **kwargs):
         kwargs['PANEL_CDN'] = CDN_DIST
@@ -855,12 +882,14 @@ def get_server(
     oauth_redirect_uri: str | None = None,
     oauth_extra_params: Mapping[str, str] = {},
     oauth_error_template: str | None = None,
+    cookie_path: str  = "/",
     cookie_secret: str | None = None,
     oauth_encryption_key: str | None = None,
     oauth_jwt_user: str | None = None,
     oauth_refresh_tokens: str | None = None,
     oauth_guest_endpoints: list[str] | None = None,
     oauth_optional: bool | None = None,
+    root_path: str | None = None,
     login_endpoint: str | None = None,
     logout_endpoint: str | None = None,
     login_template: str | None = None,
@@ -919,24 +948,29 @@ def get_server(
       The client secret for the OAuth provider
     oauth_redirect_uri: Optional[str] = None,
       Overrides the default OAuth redirect URI
-    oauth_jwt_user: Optional[str] = None,
-      Key that identifies the user in the JWT id_token.
     oauth_extra_params: dict (optional, default={})
       Additional information for the OAuth provider
     oauth_error_template: str (optional, default=None)
       Jinja2 template used when displaying authentication errors.
+    cookie_path: str (optional, default='/')
+      The sub path of the domain the cookie is valid for.
     cookie_secret: str (optional, default=None)
       A random secret string to sign cookies (required for OAuth)
     oauth_encryption_key: str (optional, default=None)
       A random encryption key used for encrypting OAuth user
       information and access tokens.
+    oauth_jwt_user: Optional[str] = None,
+      Key that identifies the user in the JWT id_token.
+    oauth_refresh_tokens: bool (optional, default=None)
+      Whether to automatically refresh OAuth access tokens when they expire.
     oauth_guest_endpoints: list (optional, default=None)
       List of endpoints that can be accessed as a guest without authenticating.
     oauth_optional: bool (optional, default=None)
       Whether the user will be forced to go through login flow or if
       they can access all applications as a guest.
-    oauth_refresh_tokens: bool (optional, default=None)
-      Whether to automatically refresh OAuth access tokens when they expire.
+    root_path: str (optional, default=None)
+      Root path the application is being served on when behind
+      a reverse proxy.
     login_endpoint: str (optional, default=None)
       Overrides the default login endpoint `/login`
     logout_endpoint: str (optional, default=None)
@@ -1064,6 +1098,8 @@ def get_server(
         config.oauth_secret = oauth_secret # type: ignore
     if oauth_extra_params:
         config.oauth_extra_params = oauth_extra_params # type: ignore
+    if cookie_path:
+        config.cookie_path = cookie_path # type: ignore
     if cookie_secret:
         config.cookie_secret = cookie_secret # type: ignore
     if oauth_redirect_uri:
@@ -1076,6 +1112,10 @@ def get_server(
         config.oauth_guest_endpoints = oauth_guest_endpoints  # type: ignore
     if oauth_jwt_user is not None:
         config.oauth_jwt_user = oauth_jwt_user  # type: ignore
+    if root_path:
+        with edit_readonly(state):
+            state.base_url = root_path  # type: ignore
+    opts['cookie_path'] = config.cookie_path
     opts['cookie_secret'] = config.cookie_secret
 
     server = Server(apps, port=port, **opts)
